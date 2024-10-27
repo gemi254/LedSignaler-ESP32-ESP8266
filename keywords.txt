@@ -1,0 +1,24 @@
+
+
+###########################################
+# Syntax Coloring Map For LedSignaler-library
+###########################################
+
+###########################################
+# Datatypes (KEYWORD1)
+###########################################
+
+ControlAssist KEYWORD1
+
+###########################################
+# Methods and Functions (KEYWORD2)
+###########################################
+
+blink KEYWORD2
+blinkTask KEYWORD2
+blinkPush KEYWORD2
+blinkInject KEYWORD2
+turnOn KEYWORD2
+turnOff KEYWORD2
+
+

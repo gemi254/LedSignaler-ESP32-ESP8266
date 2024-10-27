@@ -1,0 +1,18 @@
+{
+    "name": "LedSignaler",
+    "keywords": "blink fade signal led notifications status error",
+    "description": "A library allowing blink or fade onBoard leds on esp32/esp8266 devices, It can be used for various purposes such as indicating status, alerts, or notifications.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/gemi254/LedSignaler-ESP32-ESP8266.git"
+    },
+    "version": "1.0.0",
+    "homepage": "https://github.com/gemi254/LedSignaler-ESP32-ESP8266",
+    "examples": "examples/*/*.ino",
+    "frameworks": "arduino",
+    "platforms": [
+        "atmelavr",
+        "espressif8266",
+        "espressif32"
+    ]
+}
