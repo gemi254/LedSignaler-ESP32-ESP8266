@@ -1,8 +1,8 @@
 #ifndef LedSignaler_h
 #define LedSignaler_h
 #include <Arduino.h>
-
-#define LS_CLASS_VERSION "1.0.0"          // LedSignaler class version
+// On esp32 blink (updated in loop) and blinkTask (updated with a thread) is supported
+#define LS_CLASS_VERSION "1.0.1"          // LedSignaler class version
 
 typedef struct tagBlinkPattern{
   int16_t 	size;
@@ -25,18 +25,21 @@ class LedSignaler {
         void turnOn();                                        // Pause task and turn led on
         void turnOff();                                       // Pause task and turn led off
         uint8_t getMode();                                    // Get active preset
+        uint8_t getNextMode();                                // Get next preset
         void blink(uint8_t preset, int8_t repeats = -1);      // Start blinking
         void blinkPush(uint8_t preset, int8_t repeats = -1);  // Set next blink pattern (repeats = -1 for infinitive)
         void blinkInject(uint8_t preset, int8_t repeats = 1); // Interupt blink task and play once
         void update();                                        // Must called from loop when not in thread mode
+private:
+        void fadeLed(uint8_t pin, int value);
 #if defined(ESP32)
     public:
-    // Begin in thread mode
+        // Begin in thread mode
         void blinkTask(uint8_t preset, int8_t repeats = -1);
-    private:
-        void pauseWait();
-        static void led_task(void *arg);
+        bool hasTask() { return (_task != nullptr); }
         void endTask();
+    private:
+        static void led_task(void *arg);
 #endif
 
     private:
@@ -55,16 +58,18 @@ class LedSignaler {
         bool                _enabled;
 
     private:
-        bool                _pause;
+        //bool                _pause;
         bool                _paused;
         bool                _exitTask;
 #if defined(ESP32)
         TaskHandle_t        _task = nullptr;
+        SemaphoreHandle_t   _xSemaphore = nullptr;
 #endif
 
     private:
         byte                _fadeDirection;
         int                 _fadeValue;
+        int                 _lastFadeValue;
         int                 _fadeInterval;          // How fast to increment?
         int                 _fadeIncrement;         // How smooth to fade?
 
