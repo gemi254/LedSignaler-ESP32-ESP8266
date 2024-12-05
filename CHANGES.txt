@@ -1,2 +1,5 @@
+1.0.1 (2024-12-05)
+  * Added semaphore to handle led updates on esp32
+
 1.0.0 (2024-10-28)
   * Created LedSignaler library
