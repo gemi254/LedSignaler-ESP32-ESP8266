@@ -2,9 +2,11 @@
 size_t tm = millis();
 uint8_t ledPreset = 1;
 
+// Define the led pin if not defined
 #ifndef LED_BUILTIN
 #define LED_BUILTIN 22
 #endif
+
 LedSignaler led( LED_BUILTIN, LOW);
 
 void setup() {
@@ -24,13 +26,14 @@ void loop() {
     ++ledPreset;
     if(ledPreset > LedSignaler::BLINK_END)
       ledPreset = 1;
+    Serial.printf("Changing preset: %i\n", ledPreset);
     led.blinkPush(ledPreset);
     tm = millis();
-    Serial.printf("Changing preset: %i\n", ledPreset);
   }
-  #if defined(ESP8266)
+  // If led is not started with blinkTask need update
+#if defined(ESP8266)
   led.update();
-  #endif
+#endif
 }
 
 
