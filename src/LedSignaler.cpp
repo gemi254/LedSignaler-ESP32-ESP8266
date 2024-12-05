@@ -6,8 +6,9 @@
 #define LED_FADE_WAIT 2
 // constants for min and max led analog
 //255 - 190 = 65 / 5 = 13
+//255 - 180 = 75 / 5 = 15
 #define LED_FADE_STEPS 5
-#define LED_MIN_FADE 190
+#define LED_MIN_FADE 180
 #define LED_MAX_FADE 255
 #define LED_FADEVALUE_TO_ANALOG(x) (LED_MIN_FADE + (LED_MAX_FADE - (x)))
 #define DOT    50
@@ -21,9 +22,9 @@ int16_t _BTYPE_BLINK4[] = { DOT, DASH, DOT, DASH, DOT, DASH, DOT, PAUSE };
 int16_t _BTYPE_BLINK5[] = { DOT, DASH, DOT, DASH, DOT, DASH, DOT, DASH, DOT, PAUSE };
 int16_t _BTYPE_FAST[]   = { 5, -100, 5, -100, -500 };
 int16_t _BTYPE_RAPID[]  = { 5, -350, 5, -350 };
-int16_t _BTYPE_FADE1[]  = { 50,  -5000};
-int16_t _BTYPE_FADE2[]  = { 100, -1000};
-int16_t _BTYPE_FADE3[]  = { 200, -500};
+int16_t _BTYPE_FADE1[]  = { 100, -4000};
+int16_t _BTYPE_FADE2[]  = { 100, -800 };
+int16_t _BTYPE_FADE3[]  = { 80,  -300 };
 
 BlinkPattern LedSignaler::_blinkPresets[] = {
     {},
@@ -47,11 +48,12 @@ LedSignaler::LedSignaler(uint8_t pin, uint8_t active){
     _blinkPresetNext = BLINK_NONE;
     _repeatsNext = -1;
     _enabled = true;
-    _pause = false;
+    //_pause = false;
     _paused = true;
     _exitTask = false;
     _fadeDirection = LED_FADE_UP;
     _fadeValue = LED_MIN_FADE;
+    _lastFadeValue = -1;
     _fadeInterval = 128;
     _fadeIncrement = 8;
     pinMode(_ledPin, OUTPUT);
@@ -64,8 +66,15 @@ LedSignaler::~LedSignaler() {
     off();
  }
 
-void LedSignaler::on()        { analogWrite(_ledPin, _state ? 1024 : 0); }
-void LedSignaler::off()       { analogWrite(_ledPin, _state ? 0 : 1024); }
+void LedSignaler::fadeLed(uint8_t pin, int value){
+    if (value != _lastFadeValue) {
+        analogWrite(pin, value);
+        _lastFadeValue = value;
+    }
+}
+
+void LedSignaler::on()        { fadeLed(_ledPin, _state ? 1024 : 0); }
+void LedSignaler::off()       { fadeLed(_ledPin, _state ? 0 : 1024); }
 void LedSignaler::enable()    { _enabled = true; }
 void LedSignaler::disable()   { _enabled = false; }
 bool LedSignaler::isEnabled() { return _enabled; }
@@ -75,7 +84,9 @@ void LedSignaler::pause()     { _paused = true; }
 void LedSignaler::turnOn()    { pause(); on(); }
 void LedSignaler::turnOff()   { pause(); off(); }
 uint8_t LedSignaler::getMode()  { return _blinkPreset; }
-//Start blinking
+uint8_t LedSignaler::getNextMode()  { return _blinkPresetNext; }
+
+// Blinking begin sequence
 void LedSignaler::blink(uint8_t preset, int8_t repeats){
     if(!isEnabled()) return;
     if(preset >= BLINK_END ) return;
@@ -83,7 +94,6 @@ void LedSignaler::blink(uint8_t preset, int8_t repeats){
     _blinkPreset = preset;
     _repeats = repeats;
     _paused = false;
-    _pause = false;
     switch (preset)
     {
         case BTYPE_FADE1:
@@ -100,7 +110,7 @@ void LedSignaler::blink(uint8_t preset, int8_t repeats){
             _fadeValue = LED_MIN_FADE;
             _blinkIntv = _fadeInterval;
             //Serial.printf("Update start: %i, ndx: %i, repeat: %i, intv: %i, fintv: %i, inc: %i \n",_blinkPreset, _patNdx, _repeats, _blinkIntv,_fadeInterval,_fadeIncrement);
-            analogWrite(_ledPin, LED_FADEVALUE_TO_ANALOG(_fadeValue));
+            fadeLed(_ledPin, LED_FADEVALUE_TO_ANALOG(_fadeValue));
             _patNdx = 1;
             _blinkTick = millis();
             break;
@@ -124,26 +134,46 @@ void LedSignaler::blink(uint8_t preset, int8_t repeats){
     }
     resume();
 }
+
 // Set next blink pattern
 void LedSignaler::blinkPush(uint8_t preset, int8_t repeats /* -1 for infinitive */){
     if(preset >= BLINK_END ) return;
-    //Serial.printf("blinkPush, type: %i, repeats: %i\n",type, repeats);
+    #ifdef DEBUG
+    Serial.printf("blinkPush, type: %i, repeats: %i\n",preset, repeats);
+    #endif
     _blinkPresetNext = preset;
     _repeatsNext = repeats;
-    if( _blinkPreset == BLINK_NONE )
+    // On led disabled start a new blink
+    if( _blinkPreset == BLINK_NONE ){
+        #if defined(ESP32)
+        if(_task) blinkTask(preset, repeats);
+        else blink(preset, repeats);
+        #else
         blink(preset, repeats);
+        #endif
+    }
 }
+
 // Interupt blink task and play once
 void LedSignaler::blinkInject(uint8_t preset, int8_t repeats /* -1 for infinitive */){
     if(preset >= BLINK_END ) return;
-    //Serial.printf("blinkInject, type: %i, repeats: %i\n",type, repeats);
+    if(preset == _blinkPreset && _repeats == repeats) return;
+    #ifdef DEBUG
+    Serial.printf("blinkInject, type: %i, repeats: %i\n",preset, repeats);
+    #endif
+
     //Store current settings
     _blinkPresetNext = _blinkPreset;
     _repeatsNext = _repeats;
 
-    if( _blinkPreset == BLINK_NONE )
+    if( _blinkPreset == BLINK_NONE ){
+        #if defined(ESP32)
+        if(_task) blinkTask(preset, repeats);
+        else blink(preset, repeats);
+        #else
         blink(preset, repeats);
-    else{
+        #endif
+    }else{
         _blinkPreset = preset;
         _repeats = repeats;
         _paused = false;
@@ -151,6 +181,7 @@ void LedSignaler::blinkInject(uint8_t preset, int8_t repeats /* -1 for infinitiv
     }
 }
 
+// Called from thread or from app loop
 void LedSignaler:: update(){
     if(isPaused() || !isEnabled() || _blinkPreset == BLINK_NONE) return;
     if ((int16_t)(millis() - _blinkTick) < _blinkIntv) return;
@@ -204,7 +235,7 @@ void LedSignaler:: update(){
         }
         // Only need to update when it changes
         if (_fadeDirection != LED_FADE_WAIT){
-            analogWrite(_ledPin, LED_FADEVALUE_TO_ANALOG(_fadeValue));
+            fadeLed(_ledPin, LED_FADEVALUE_TO_ANALOG(_fadeValue));
         }
     }else{ // Blink
         _blinkIntv = _blinkPresets[_blinkPreset].pattern[_patNdx];
@@ -220,61 +251,71 @@ void LedSignaler:: update(){
 
     _blinkTick = millis();
 }
+
 #if defined(ESP32)
 // Begin in thread mode
 void LedSignaler::blinkTask(uint8_t preset, int8_t repeats){
-    if(!isEnabled()) return;
-    if(preset == _blinkPreset && _repeats == repeats) return;
-    if(_task){
-        pauseWait();
-    }else{
-        if (xTaskCreatePinnedToCore(&led_task,"led_task", 2*1024, this, 2, &_task, 1) != pdTRUE) {
+    if(!isEnabled() || (preset == _blinkPreset && _repeats == repeats) ) return;
+
+    // Create a binary semaphore
+    if(_xSemaphore == nullptr) _xSemaphore = xSemaphoreCreateBinary();
+    // Block task
+    xSemaphoreTake(_xSemaphore, 0);
+
+    // Task not exists
+    if (_task == nullptr){
+        if (xTaskCreatePinnedToCore(&led_task,"led_task", 6 * 512, this, 2, &_task, 1) != pdTRUE) {
             _task = nullptr;
-            Serial.printf("startTask failed\n");
+            Serial.printf("Start led task error.\n");
         }
-        Serial.printf("Started led task.\n");
     }
+
+    #ifdef DEBUG
+    Serial.printf("blinkTask, type: %i, repeats: %i\n",preset, repeats);
+    #endif
     blink(preset, repeats);
+    xSemaphoreGive(_xSemaphore);
 }
-// Wait for thread to pause
-void LedSignaler::pauseWait() {
-    _pause = true;
-    while(!_paused){
-        //Serial.print(".");
-        usleep(100 * 1000);
-    }
-}
+
 // Led thread task
 void LedSignaler::led_task(void *arg) {
     LedSignaler *flasher = static_cast<LedSignaler *>(arg);
     while( !flasher->_exitTask ){
-        if(flasher->_pause){
-            Serial.printf("Pause Led task\n");
-            flasher->_paused = true;
-            flasher->off();
-            // Sleep until resume
-            while(flasher->_pause){
-                flasher->_paused = true;
-                Serial.printf("Led paused\n");
-                usleep(100 * 1000);
-            }
-            flasher->_paused = false;
-        }
-
+        // Wait (block) until the semaphore is available
+        xSemaphoreTake(flasher->_xSemaphore, portMAX_DELAY);
         flasher->update();
-        //usleep((flasher->_blinkIntv)* 1000);
-        usleep(100 * 1000);
+        xSemaphoreGive(flasher->_xSemaphore);
+        // 50 ms delay, flasher->update will handle timing
+        vTaskDelay(50 / portTICK_PERIOD_MS);
     }
+
+    #ifdef DEBUG
     Serial.printf("ledFlasher exiting..\n");
+    #endif
+    // Turn off the LED or perform cleanup before deleting the task
     flasher->off();
+
+    // Release the semaphore before deleting the task
+    xSemaphoreGive(flasher->_xSemaphore);
+
     flasher->_paused = false;
     flasher->_exitTask = false;
     flasher->_task = NULL;
-    vTaskDelete( NULL );
+
+    // Delete the task itself
+    vTaskDelete(NULL);
 }
+
 // Signal thread to exit
 void LedSignaler::endTask(){
-    _pause = false;
+    if(_task == nullptr) return;
     _exitTask = true;
+    xSemaphoreGive(_xSemaphore);
+    while(_task ) Serial.printf(".");
+
+    if(_xSemaphore != nullptr){
+        vSemaphoreDelete(_xSemaphore);
+        _xSemaphore = nullptr;
+    }
 }
 #endif
